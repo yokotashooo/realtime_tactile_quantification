@@ -1,5 +1,7 @@
 # Realtime tactile quantification
 
+## プロジェクト構成
+
 * `realtime_data_transfer`  
 Apache Kafkaを利用してデータをストリーミング転送するモジュールです．実験環境はこのプロジェクト内で設定されており，本番環境では研究室のLinuxサーバーを利用します．
 
