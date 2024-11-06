@@ -1,0 +1,27 @@
+FROM python:3.11.9-slim
+USER root
+
+RUN apt-get update
+RUN apt-get -y install locales && localedef -f UTF-8 -i ja_JP ja_JP.UTF-8
+
+ENV LANG ja_JP.UTF-8
+ENV LANGUAGE ja_JP:ja
+ENV LC_ALL ja_JP.UTF-8
+ENV TZ JST-9
+ENV TERM xterm
+
+RUN apt-get install -y vim less
+RUN pip install --upgrade pip
+RUN pip install --upgrade setuptools
+
+COPY requirements.txt ./
+COPY convolve123456_0.txt ./
+COPY convolve123456_1.txt ./
+COPY convolve123456_2.txt ./
+COPY convolve123456_3.txt ./
+COPY assignment_epoch3.npy ./
+COPY exc_neurons_epoch3.npy ./
+COPY weight_epoch3.npy ./
+
+RUN pip install -r requirements.txt
+

@@ -1,0 +1,4 @@
+numpy
+kafka-python
+numba
+scipy

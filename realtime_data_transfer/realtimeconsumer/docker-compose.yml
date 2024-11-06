@@ -1,0 +1,13 @@
+version: '3'
+services:
+  iot:
+    build: .
+    working_dir: '/app/'
+    tty: true
+    volumes:
+      - ./opt:/app/opt
+
+networks:
+  default:
+    external:
+      name: iot_network
