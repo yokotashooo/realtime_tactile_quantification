@@ -1,8 +1,10 @@
 ## 仕様
-* `public_comment`  
-メールの送信
+* `realtime_data_transfer`  
+分散型ストリーミングプラットフォームであるApache kafkaを利用したデータ転送（実験環境）
 
-  * `cancellation-mailer`  
+本番は研究室のLinuxPCをサーバーとして起動し，データをストリーミング転送
+
+  * ``  
     解約に関するお問い合わせがあった際に、メールを自動作成する機能  
 
   * `change-unit-time-mailer`  
