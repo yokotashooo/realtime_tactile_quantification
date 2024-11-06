@@ -4,10 +4,10 @@
 
 本番は研究室のLinuxPCをサーバーとして起動し，データをストリーミング転送
 
-  * ``  
+  * `realtimeconsumer`  
     解約に関するお問い合わせがあった際に、メールを自動作成する機能  
 
-  * `change-unit-time-mailer`  
+  * `realtimeproducer`  
     勤務の時間単位を変更したいというお問い合わせがあった際に、メールを自動作成する機能  
 
 * `local_comment`  
