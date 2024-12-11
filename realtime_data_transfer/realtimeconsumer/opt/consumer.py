@@ -1,5 +1,6 @@
 from kafka import KafkaConsumer
 from concurrent.futures import ProcessPoolExecutor
+from multiprocessing import Process, Queue
 import numpy as np
 from scipy import integrate
 import pickle
@@ -10,38 +11,6 @@ from numba import f8, i8
 import time
 import json
 import ast
-
-
-def lif(currents, time: int, dt: float = 1.0, rest=-65,
-        th=-52, ref=3, tc_decay=100):
-    """ simple LIF neuron """
-    time = int(time / dt)
-
-    # initialize
-    tlast = 0  # 最後に発火した時刻
-    vpeak = 20  # 膜電位のピーク(最大値)
-    spikes = np.zeros(time)
-    v = rest  # 静止膜電位
-
-    monitor = []  # monitor voltage
-
-    # Core of LIF
-    # 微分方程式をコーディングするときは，このように時間分解能dtで離散的に計算することが多い
-    for t in range(time):
-        dv = ((dt * t) > (tlast + ref)) * (-v + rest +
-                                           currents[t]) / tc_decay  # 微小膜電位増加量
-        v = v + dt * dv  # 膜電位を計算
-
-        tlast = tlast + (dt * t - tlast) * (v >= th)  # 発火したら発火時刻を記録
-        v = v + (vpeak - v) * (v >= th)  # 発火したら膜電位をピークへ
-
-        monitor.append(v)
-
-        spikes[t] = (v >= th) * 1  # スパイクをセット
-
-        v = v + (rest - v) * (v >= th)  # 静止膜電位に戻す
-
-    return spikes, monitor
 
 
 def kernel(t):
@@ -417,174 +386,7 @@ class DiehlAndCook2015Network:
         return s_exc
 
 
-def process_channel(n, data):
-    duration = 2000
-    convolve_dt = 0.2
-    t = np.arange(0, duration, convolve_dt)
-    f = open(f"/convolve123456_{n}.txt", "rb")
-    k = 9
-    GF = 100
-    row = pickle.load(f)
-
-    convolve_list = []
-    spikes_7 = np.zeros(int(duration / convolve_dt))
-    input_data_7 = GF * data[:, n]
-    spikes_7, voltage_7 = lif(input_data_7, duration, convolve_dt)
-    print(time.time())
-    convolve_7 = np.convolve(spikes_7, kernel(t))[:int(duration / convolve_dt)]
-
-    for m in range(600):
-        convolve_list.append(integrate.trapz((convolve_7 - row[m]) ** 2, t))
-
-    convolve_list_sort = np.array(convolve_list).argsort()
-    knn = (convolve_list_sort + 100) // 100
-    mode = statistics.multimode(knn[:k])
-    if len(mode) == 2:
-        index1 = np.where(knn[:k] == mode[0])
-        index2 = np.where(knn[:k] == mode[1])
-        sum1 = sum(itemgetter(*index1[0])(sorted(convolve_list)))
-        sum2 = sum(itemgetter(*index2[0])(sorted(convolve_list)))
-        if sum1 > sum2:
-            index = mode[1]
-        else:
-            index = mode[0]
-    else:
-        index = mode[0]
-    print(index)
-    print(time.time())
-    return [index, spikes_7]
-
-
-def parallel_processing(data):
-    with ProcessPoolExecutor() as executor:
-        results = list(executor.map(process_channel, range(4), [data]*4))
-    print(results)
-    index_list, spike_list = zip(*results)
-    print(index_list)
-    spikes_array = np.array(spike_list, dtype=int).T
-    print(index_list)
-    return index_list, spikes_array
-
-
-def prediction(spikes, assignments, n_labels):
-    # print(n_samples)
-
-    # 各サンプルについて各ラベルの発火率を見る
-    rates = np.zeros((n_labels)).astype(np.float32)
-
-    # spikes:1*60
-    # print(assignments)
-
-    for i in range(n_labels):
-        n_assigns = np.sum(assignments == i).astype(np.uint8)
-        # print(n_assigns)
-
-        if n_assigns > 0:
-            indices = np.where(assignments == i)[0]
-        # print(indices)
-
-        # 各ラベルのニューロンのレイヤー全体における平均発火数を求める
-        # rates[i] = np.sum(spikes[indices], axis=1) / n_assigns
-            rates[i] = np.sum(spikes[indices]) / n_assigns
-    # print(rates)
-
-    predicted_label = np.argmax(rates).astype(np.uint8)
-    # print(f"Type of predicted_label: {type(predicted_label).__name__}")
-    # message = str(int(predicted_label)).encode('utf-8')
-    # producer.send('topic-01', message)
-    # レイヤーの平均発火率が最も高いラベルを出力
-    return predicted_label  # (n_samples, )
-
-
-def processing(data, network_test, assignments):
-    # producer = KafkaProducer(bootstrap_servers=['broker:29092'])
-    # GF =100
-    # duration = 2000
-    # convolve_dt = 0.2
-    index_list, spikes_array = parallel_processing(data)
-    print(time.time())
-
-    print(index_list)
-
-    A = index_list[0]
-    B = index_list[1]
-    C = index_list[2]
-    D = index_list[3]
-
-    e = np.zeros((10000, 28))
-
-    b = spikes_array
-
-    # bの各列を特定の位置に挿入
-    e[:, A*4-4] = b[:, 0]
-    e[:, B*4-3] = b[:, 1]
-    e[:, C*4-2] = b[:, 2]
-    e[:, D*4-1] = b[:, 3]
-
-    # リストに行列と追加のデータを追加
-    list_test = e
-
-    # print(list_test)
-
-    # para_dic= {'w_exc': 4.544910490280396, 'w_inh': 1.3082028299035284,
-    #  'lr1': 0.0312611326044722, 'lr2': 0.03392142258355323
-    # , 'Norm': 0.12856140170464153}
-    n_labels = 8  # ラベルの数
-    dt = 2e-4  # タイムステップ(sec)
-    t_inj = 2.0  # 刺激入力時間(sec)
-    nt_inj = round(t_inj/dt)
-
-    n_neurons = 60  # 興奮性/抑制性ニューロンの数
-    n_labels = 8  # ラベル数
-
-    spikes_val = np.zeros((1, n_neurons)).astype(np.uint8)
-    input_spikes_val = list_test
-    spike_list = []  # サンプルごとにスパイクを記録するリスト
-    # 画像刺激の入力
-    print(time.time())
-    for t in range(nt_inj):
-        s_exc_test = network_test(input_spikes_val[t], stdp=False)
-        spike_list.append(s_exc_test)
-    print(time.time())
-
-    spikes_val = np.sum(np.array(spike_list), axis=0)
-    # print(spikes_val)
-    predicted_labels_val = prediction(spikes_val, assignments, n_labels)
-    # predicted_labels_val = prediction(spikes_val, assignments
-    # , n_labels, producer)
-    print('Val prediction:\n', predicted_labels_val)
-    print(time.time())
-    # producer = KafkaProducer(bootstrap_servers=['localhost:9092'],
-    # value_serializer=lambda x: json.dumps(x).encode('utf-8'))
-
-    # データをJSON形式でエンコードして送信
-    # producer.send("final-topic", value=predicted_labels_val)
-    # producer.flush()
-
-
-def main():
-    n_in = 28
-    n_neurons = 60
-    wexc = 4.544910490280396
-    winh = 1.3082028299035284
-    lr = (0.0312611326044722, 0.03392142258355323)
-    norm = 0.12856140170464153
-    dt = 2e-4
-
-    network_test = DiehlAndCook2015Network(n_in=n_in, n_neurons=n_neurons,
-                                           dt=dt, wexc=wexc, winh=winh,
-                                           lr=lr, norm=norm)
-    # 学習済みの重みと閾値の読み込み
-    weight_path = '/weight_epoch3.npy'
-    theta_path = '/exc_neurons_epoch3.npy'
-    assignments_path = '/assignment_epoch3.npy'  # 割り当て情報
-
-    network_test.input_conn.W = np.load(weight_path)
-    network_test.exc_neurons.theta = np.load(theta_path)
-    network_test.exc_neurons.theta_plus = 0
-
-    assignments = np.load(assignments_path)
-
+def collect_data(queue_in):
     consumer = KafkaConsumer(
         'experi',  # トピック名
         bootstrap_servers='broker:29092',  # ブートストラップサーバー
@@ -595,12 +397,108 @@ def main():
     )
     print("Starting Consumer...")
     for message in consumer:
-        print(time.time())
         data_str = json.loads(message.value)
         data_list = ast.literal_eval(data_str)
-        data_array = np.array(data_list)
-        processing(data_array, network_test, assignments)
+        transformed = list(map(list, zip(*data_list)))
+        for elem in transformed:
+            queue_in.put(elem)
+
+
+def count_ones_by_label(labels, predictions):
+    count_label_1 = 0
+    count_label_2 = 0
+    for lbl, pred in zip(labels, predictions):
+        if pred == 1:
+            if lbl == 1:
+                count_label_1 += 1
+            elif lbl == 2:
+                count_label_2 += 1
+    return (count_label_1, count_label_2)
+
+
+def classification(queue_in, queue_out):
+    n_in = 6
+    n_neurons = 20
+    wexc = 4.544910490280396
+    winh = 1.3082028299035284
+    lr = (0.0312611326044722, 0.03392142258355323)
+    norm = 0.12856140170464153
+    dt = 2e-4
+
+    network_test = DiehlAndCook2015Network(n_in=n_in, n_neurons=n_neurons,
+                                           dt=dt, wexc=wexc, winh=winh,
+                                           lr=lr, norm=norm)
+    # 学習済みの重みと閾値の読み込み
+    weight_path = '/weight_epoch9.npy'
+    theta_path = '/exc_neurons_epoch9.npy'
+    assignments_path = '/assignment_epoch9.npy'  # 割り当て情報
+
+    network_test.input_conn.W = np.load(weight_path)
+    network_test.exc_neurons.theta = np.load(theta_path)
+    network_test.exc_neurons.theta_plus = 0
+
+    assignments = np.load(assignments_path)
+    while True:
+        item = queue_in.get()
+        s_exc_test = network_test(item, stdp=False)
+        result = count_ones_by_label(assignments, s_exc_test)
+        queue_out.put(result)
+
+
+def decision_making(queue_out):
+    sliding_queue = Queue()
+    sum_x, sum_y = 0, 0
+    while True:
+        x, y = queue_out.get()
+        sliding_queue.put((x, y))
+        sum_x += x
+        sum_y += y
+        if sliding_queue.qsize() > 100:
+            old_x, old_y = sliding_queue.get()
+            sum_x -= old_x
+            sum_y -= old_y
+        print((sum_x, sum_y))
 
 
 if __name__ == '__main__':
-    main()
+    n_in = 6
+    n_neurons = 20
+    wexc = 4.544910490280396
+    winh = 1.3082028299035284
+    lr = (0.0312611326044722, 0.03392142258355323)
+    norm = 0.12856140170464153
+    dt = 2e-4
+
+    network_test = DiehlAndCook2015Network(n_in=n_in, n_neurons=n_neurons,
+                                           dt=dt, wexc=wexc, winh=winh,
+                                           lr=lr, norm=norm)
+    # 学習済みの重みと閾値の読み込み
+    weight_path = '/weight_epoch9.npy'
+    theta_path = '/exc_neurons_epoch9.npy'
+    assignments_path = '/assignment_epoch9.npy'  # 割り当て情報
+
+    network_test.input_conn.W = np.load(weight_path)
+    network_test.exc_neurons.theta = np.load(theta_path)
+    network_test.exc_neurons.theta_plus = 0
+
+    assignments = np.load(assignments_path)
+
+    queue_in = Queue()
+    queue_out = Queue()
+
+    # プロセスの作成
+    producer = Process(target=collect_data, args=(queue_in,))
+    processor = Process(target=classification, args=(queue_in, queue_out))
+    consumer = Process(target=decision_making, args=(queue_out,))
+
+    # プロセスの開始
+    processor.start()
+    consumer.start()
+    producer.start()
+
+    # 全プロセスが終了するまで待機
+    producer.join()
+    processor.join()
+    consumer.join()
+
+    print("All processes finished.")

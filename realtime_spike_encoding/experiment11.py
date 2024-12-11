@@ -70,7 +70,7 @@ def collect_data(queue):
     fLost = 0
     fCorrupted = 0
     cSamples = 0
-    nSamples = 100000
+    nSamples = 10000
     print("Starting oscilloscope")
     dwf.FDwfAnalogInConfigure(hdwf, c_int(0), c_int(1))
     while cSamples < nSamples:
@@ -257,7 +257,7 @@ def spike_encoding(queue):
             results = [future.result() for future in futures]
 
             spike_tuple = (
-                results[0],  # 最後のスパイク結果
+                results[0],  
                 results[1],
                 results[2],
                 results[3],
