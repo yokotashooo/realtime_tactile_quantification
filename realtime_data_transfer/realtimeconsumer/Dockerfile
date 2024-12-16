@@ -15,10 +15,6 @@ RUN pip install --upgrade pip
 RUN pip install --upgrade setuptools
 
 COPY requirements.txt ./
-COPY convolve123456_0.txt ./
-COPY convolve123456_1.txt ./
-COPY convolve123456_2.txt ./
-COPY convolve123456_3.txt ./
 COPY assignment_epoch9.npy ./
 COPY exc_neurons_epoch9.npy ./
 COPY weight_epoch9.npy ./
