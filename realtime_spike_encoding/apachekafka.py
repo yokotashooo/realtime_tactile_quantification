@@ -60,7 +60,7 @@ previous_states = {
     }
 
 
-def collect_data(queue):
+def collect_data(queue_in):
     hdwf, dwf = initialize_device()
 
     cAvailable = c_int()
@@ -70,13 +70,9 @@ def collect_data(queue):
     fLost = 0
     fCorrupted = 0
     cSamples = 0
-    nSamples = 10000
+    nSamples = 100000
     print("Starting oscilloscope")
     dwf.FDwfAnalogInConfigure(hdwf, c_int(0), c_int(1))
-    trigger_level = 0.15  # 閾値を1.0Vに設定
-    trigger_started = False
-
-
     while cSamples < nSamples:
         dwf.FDwfAnalogInStatus(hdwf, c_int(1), byref(sts))
         if cSamples == 0 and (sts == DwfStateConfig or sts == DwfStatePrefill or sts == DwfStateArmed) :
@@ -94,25 +90,16 @@ def collect_data(queue):
 
         if cAvailable.value==0 :
             continue
-        if not trigger_started:
-            tmp_samples = (c_double * cAvailable.value)()
-            dwf.FDwfAnalogInStatusData(hdwf, c_int(0), byref(tmp_samples), cAvailable)
-            list(tmp_samples[:cAvailable.value])
-            for sample in tmp_samples:
-                if sample >= trigger_level:
-                    trigger_started = True
-                    print("starting recording...")
-                    break
 
-        if trigger_started:
-            if cSamples + cAvailable.value > nSamples:
-                cAvailable = c_int(nSamples - cSamples)
-            rgdSamples = (c_double * cAvailable.value)()
-            dwf.FDwfAnalogInStatusData(hdwf, c_int(0), rgdSamples, cAvailable) # get channel 1 data　おそらくunreaddataから読まれていく仕組み
-            queue.put(list(rgdSamples[:cAvailable.value]))
-            cSamples += cAvailable.value
+        if cSamples+cAvailable.value > nSamples :
+            cAvailable = c_int(nSamples-cSamples)
+        rgdSamples = (c_double * cAvailable.value)()
+        dwf.FDwfAnalogInStatusData(hdwf, c_int(0), rgdSamples, cAvailable) # get channel 1 data　おそらくunreaddataから読まれていく仕組み
+        queue_in.put(list(rgdSamples[:cAvailable.value]))
+
+        cSamples += cAvailable.value
     print("終わった")
-    queue.put(None)
+    queue_in.put(None)
     dwf.FDwfAnalogOutReset(hdwf, c_int(0))
     dwf.FDwfDeviceCloseAll()
 
@@ -242,11 +229,11 @@ def call_function_with_args(func, *args):
     return func(*args)
 
 
-def spike_encoding(queue):
+def spike_encoding(queue_in,queue_out):
     t = 0
     with ThreadPoolExecutor(max_workers=8) as executor:
         while True:
-            item = queue.get()
+            item = queue_in.get()
             if item is None:
                 break
 
@@ -271,26 +258,37 @@ def spike_encoding(queue):
                 results[4],
                 results[5]
             )
+            queue_out.put(spike_tuple)
 
             # Kafkaに結果を送信
-            # print({'time': t, 'spikes': spike_tuple})
+            print({'time': t, 'spikes': spike_tuple})
 
             t += 1
+
+
+def data_transfer(queue_out):
+    
+    queue_in.put(result)
+
 
 
 
 if __name__ == '__main__':
 
-    queue = Queue()
+    queue_in = Queue()
+    queue_out = Queue()
 
     # プロセスの作成
-    producer1 = Process(target=collect_data, args=(queue,))
-    consumer1 = Process(target=spike_encoding, args=(queue,))
+    producer = Process(target=collect_data, args=(queue_in,))
+    processor = Process(target=spike_encoding, args=(queue_in,queue_out))
+    consumer = Process(target=data_transfer, args=(queue_out,))
 
     # プロセスの開始
-    producer1.start()
-    consumer1.start()
+    producer.start()
+    processor.start()
+    consumer.start()
 
     # プロセスの終了待ち
-    producer1.join()
-    consumer1.join()
+    producer.join()
+    processor.join()
+    consumer.join()
