@@ -117,7 +117,7 @@ if fLost:
 if fCorrupted:
     print("Samples could be corrupted! Reduce frequency")
 
-file_path= r"C:\Users\yshou\yasapy\Vibrationdata\sample3\sample3_120.txt"
+file_path= r"C:\Users\yshou\yasapy\Vibrationdata_new\sample2\sample2_120.txt"
 directory = os.path.dirname(file_path)
 if not os.path.exists(directory):
     os.makedirs(directory)
