@@ -1,3 +1,4 @@
+from typing import Counter
 from kafka import KafkaConsumer
 from concurrent.futures import ProcessPoolExecutor
 from multiprocessing import Process, Queue
@@ -12,6 +13,7 @@ import time
 import json
 import ast
 import os
+from collections import Counter
 
 
 def kernel(t):
@@ -120,7 +122,7 @@ class ConductanceBasedLIF:
 class DiehlAndCook2015LIF:
     def __init__(self, N, dt=1e-3, tref=5e-3, tc_m=1e-1,
                  vrest=-65, vreset=-65, init_vthr=-52, vpeak=20,
-                 theta_plus=0.05, theta_max=35,
+                 theta_plus=0.025, theta_max=35,
                  tc_theta=1e4, e_exc=0, e_inh=-100):
         """
         Leaky integrate-and-fire model of Diehl and Cooks (2015)
@@ -392,7 +394,7 @@ def collect_data(queue_in):
     consumer = KafkaConsumer(
         'rasp-start',  # トピック名
         bootstrap_servers=kafka_broker,  # ブートストラップサーバー
-        auto_offset_reset='latest',  # トピックの最初から読み取る
+        auto_offset_reset='earliest',  # トピックの最初から読み取る
         enable_auto_commit=True,
         group_id='g4', # 自動コミットを有効にする  # コンシューマーグループを識別するためのやつ，２つ以上のconsumerを管理
         value_deserializer=lambda x: x.decode('utf-8')  # デシリアライズ方法を指定（UTF-8でデコード）
@@ -453,6 +455,10 @@ def classification(queue_in, queue_out):
 def decision_making(queue_out):
     sliding_queue = Queue()
     sum_x, sum_y = 0, 0
+    assignments_path = '/assignment_epoch9.npy'
+    labels = np.load(assignments_path)
+    label_count = Counter(labels)
+    print(label_count)
     while True:
         x, y = queue_out.get()
         sliding_queue.put((x, y))
@@ -462,7 +468,9 @@ def decision_making(queue_out):
             old_x, old_y = sliding_queue.get()
             sum_x -= old_x
             sum_y -= old_y
-        print((sum_x, sum_y))
+        average_x = sum_x / label_count[1]
+        average_y = sum_y / label_count[2]
+        print((average_x, average_y))
 
 
 if __name__ == '__main__':
@@ -470,7 +478,7 @@ if __name__ == '__main__':
     queue_out = Queue()
 
     # プロセスの作成
-    producer = Process(target=collect_data, args=(queue_in,)
+    producer = Process(target=collect_data, args=(queue_in,))
     processor = Process(target=classification, args=(queue_in, queue_out))
     consumer = Process(target=decision_making, args=(queue_out,))
 
