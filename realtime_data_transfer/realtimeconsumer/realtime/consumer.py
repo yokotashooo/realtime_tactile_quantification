@@ -404,6 +404,7 @@ def collect_data(queue_in):
         #print(f'Received message: {message.value}')
         # data_str = {message.value}
         data_str = json.loads(message.value)
+        #print(data_str)
         #data_list = ast.literal_eval(data_str)
         transformed = list(map(list, zip(*data_str)))
         for elem in transformed:
@@ -423,18 +424,13 @@ def count_ones_by_label(labels, predictions):
     return (count_label_1, count_label_2)
 
 
-def classification(queue_in, queue_out):
+def classification(queue_in, queue_middle):
     n_in = 6
     n_neurons = 20
-    wexc = 4.544910490280396
-    winh = 1.3082028299035284
-    lr = (0.0312611326044722, 0.03392142258355323)
-    norm = 0.12856140170464153
     dt = 2e-4
 
     network_test = DiehlAndCook2015Network(n_in=n_in, n_neurons=n_neurons,
-                                           dt=dt, wexc=wexc, winh=winh,
-                                           lr=lr, norm=norm)
+                                           dt=dt)
     # 学習済みの重みと閾値の読み込み
     weight_path = '/weight_epoch9.npy'
     theta_path = '/exc_neurons_epoch9.npy'
@@ -445,14 +441,15 @@ def classification(queue_in, queue_out):
     network_test.exc_neurons.theta_plus = 0
 
     assignments = np.load(assignments_path)
+    print(assignments)
     while True:
         item = queue_in.get()
         s_exc_test = network_test(item, stdp=False)
         result = count_ones_by_label(assignments, s_exc_test)
-        queue_out.put(result)
+        queue_middle.put(result)
 
 
-def decision_making(queue_out):
+def decision_making(queue_middle,queue_out):
     sliding_queue = Queue()
     sum_x, sum_y = 0, 0
     assignments_path = '/assignment_epoch9.npy'
@@ -460,27 +457,36 @@ def decision_making(queue_out):
     label_count = Counter(labels)
     print(label_count)
     while True:
-        x, y = queue_out.get()
+        x, y = queue_middle.get()
         sliding_queue.put((x, y))
         sum_x += x
         sum_y += y
-        if sliding_queue.qsize() > 1000:
+        if sliding_queue.qsize() > 5000:
             old_x, old_y = sliding_queue.get()
             sum_x -= old_x
             sum_y -= old_y
         average_x = sum_x / label_count[1]
         average_y = sum_y / label_count[2]
-        print((average_x, average_y))
+        queue_out.put((average_x,average_y))
+        #print((average_x, average_y))
+
+
+def update_ui(queue_out, label_x, label_y):
+    while True:
+        average_x, average_y =queue_out.get()
+        label_x.set(f"X: {average_x:.2f}")
+        label_y.set(f"Y: {average_y:.2f}")
 
 
 if __name__ == '__main__':
     queue_in = Queue()
+    queue_middle = Queue()
     queue_out = Queue()
 
     # プロセスの作成
     producer = Process(target=collect_data, args=(queue_in,))
-    processor = Process(target=classification, args=(queue_in, queue_out))
-    consumer = Process(target=decision_making, args=(queue_out,))
+    processor = Process(target=classification, args=(queue_in, queue_middle))
+    consumer = Process(target=decision_making, args=(queue_middle,queue_out))
 
     # プロセスの開始
     processor.start()
