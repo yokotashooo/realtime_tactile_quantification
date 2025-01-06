@@ -486,7 +486,7 @@ def decision_making(queue_middle,queue_out):
 def update_ui(queue_out):
     while True:
         result = queue_out.get()
-        print(result)  # Queue から結果を取得
+        #print(result)  # Queue から結果を取得
         socketio.emit("update_data", {'result': result})
 
 
