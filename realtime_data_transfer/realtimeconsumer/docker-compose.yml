@@ -8,3 +8,5 @@ services:
       - ./realtime:/app/realtime
     environment:
       KAFKA_BROKER: "172.17.39.222:9092"
+    ports:
+      - "5010:5010"

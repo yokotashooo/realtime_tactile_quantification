@@ -14,6 +14,13 @@ import json
 import ast
 import os
 from collections import Counter
+from flask import Flask, render_template
+from flask_socketio import SocketIO
+import threading
+
+
+app = Flask(__name__)
+socketio = SocketIO(app, cors_allowed_origin="*")
 
 
 def kernel(t):
@@ -467,15 +474,31 @@ def decision_making(queue_middle,queue_out):
             sum_y -= old_y
         average_x = sum_x / label_count[1]
         average_y = sum_y / label_count[2]
-        queue_out.put((average_x,average_y))
+        if average_x > average_y:
+            queue_out.put("sample1")
+        elif average_x < average_y:
+            queue_out.put("sample2")
+        else:
+            queue_out.put("None")
         #print((average_x, average_y))
 
 
-def update_ui(queue_out, label_x, label_y):
+def update_ui(queue_out):
     while True:
-        average_x, average_y =queue_out.get()
-        label_x.set(f"X: {average_x:.2f}")
-        label_y.set(f"Y: {average_y:.2f}")
+        result = queue_out.get()
+        print(result)  # Queue から結果を取得
+        socketio.emit("update_data", {'result': result})
+
+
+@app.route('/')
+def index():
+    return render_template('index.html')
+
+
+#@app.route('/send_message')
+#def send_message():
+#    data={"result":"This is"}
+ #   socketio.emit('update_data', )
 
 
 if __name__ == '__main__':
@@ -486,12 +509,16 @@ if __name__ == '__main__':
     # プロセスの作成
     producer = Process(target=collect_data, args=(queue_in,))
     processor = Process(target=classification, args=(queue_in, queue_middle))
-    consumer = Process(target=decision_making, args=(queue_middle,queue_out))
+    consumer = Process(target=decision_making, args=(queue_middle, queue_out))
+    #update_process = Process(target=update_ui, args=(queue_out,))
 
     # プロセスの開始
+    #update_process.start()
     processor.start()
     consumer.start()
     producer.start()
+    socketio.start_background_task(update_ui, queue_out)
+    socketio.run(app, host="0.0.0.0", port=5010, debug=True, allow_unsafe_werkzeug=True)
 
     # 全プロセスが終了するまで待機
     producer.join()

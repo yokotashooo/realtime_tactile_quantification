@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-Time Sample</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <script>
+        document.addEventListener("DOMContentLoaded", () => {
+            const socket = io("http://127.0.0.1:5010");
+            socket.on("connect", () => {
+                console.log("Connected to the");
+            });
+
+            socket.on("update_data", (data) => {
+                const resultDisplay = document.getElementById("result");
+                if(resultDisplay){
+                    resultDisplay.textContent = data.result;
+                }else{
+                    console.error("kekkanasi")
+                }
+            });
+        });
+    </script>
+</head>
+<body>
+    <h1>Current Sample: <span id="result">N/A</span></h1>
+</body>
+</html>
+
+

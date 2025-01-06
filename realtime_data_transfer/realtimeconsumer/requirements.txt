@@ -2,3 +2,5 @@ numpy
 kafka-python
 numba
 scipy
+flask
+flask-socketio
