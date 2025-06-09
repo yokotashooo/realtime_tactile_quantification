@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-Time Sample</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <style>
+        body, html {
+            height: 100%;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 84px;
+        }
+        .red {color: red;}
+        .blue {color: blue;}
+    </style>
+    <script>
+        document.addEventListener("DOMContentLoaded", () => {
+            const socket = io("http://127.0.0.1:5010");
+            socket.on("connect", () => {
+                console.log("Connected to the");
+            });
+
+            socket.on("update_data", (data) => {
+                const resultDisplay = document.getElementById("result");
+                resultDisplay.textContent = data.result;
+                if (data.result === "sample1"){
+                    resultDisplay.className = "red";
+                } else if (data.result === "sample2"){
+                    resultDisplay.className = "blue";
+                } else {
+                    resultDisplay.className = "";
+                }
+            });
+        });
+    </script>
+</head>
+<body>
+    <h1>Current Sample: <span id="result">N/A</span></h1>
+</body>
+</html>
+
+

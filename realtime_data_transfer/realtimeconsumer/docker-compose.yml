@@ -5,9 +5,8 @@ services:
     working_dir: '/app/'
     tty: true
     volumes:
-      - ./opt:/app/opt
-
-networks:
-  default:
-    external:
-      name: iot_network
+      - ./realtime:/app/realtime
+    environment:
+      KAFKA_BROKER: "172.17.39.222:9092"
+    ports:
+      - "5010:5010"
